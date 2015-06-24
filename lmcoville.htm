@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>LMCOville</title>
+	</head>
+		<style>
+			body { margin: 0; }
+			canvas { width: 100%; height: 100% }
+		</style>
+
+
+	<body>
+		<script src="../build/three.min.js"></script>
+		<script src="../examples/js/controls/OrbitControls.js"></script>
+		<script src="../examples/fonts/gentilis_bold.typeface.js"></script>
+		<script src="../examples/fonts/gentilis_regular.typeface.js"></script>
+		<script src="../examples/fonts/optimer_bold.typeface.js"></script>
+		<script src="../examples/fonts/optimer_regular.typeface.js"></script>
+		<script src="../examples/fonts/helvetiker_regular.typeface.js"></script>
+		<script src="../examples/fonts/helvetiker_bold.typeface.js"></script>
+		<script src="../threex/threex.keyboardstate.js"></script>
+		<script src="../threex/threex.domevent/threex.domevent.js"></script>
+
+		<script>
+			var keyboard = new THREEx.KeyboardState();
+			var AeronauticsCamera
+			var AeronauticsCameraActive = false;
+
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera (45, window.innerWidth/window.innerHeight, 0.1, 50000);
+
+			var renderer = new THREE.WebGLRenderer();
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			document.body.appendChild(renderer.domElement);
+
+			//global variables
+			var rad = 700
+			var small = 125
+			var medium = 175
+			var large = 225
+			var verylarge = 300
+			var width = 85
+
+			var raycaster = new THREE.Raycaster();
+			var mouse = new THREE.Vector2();
+
+			var targetList = [];
+			var projector, mouse = { x:0, y:0 };
+
+
+			init();
+			animate();
+
+			function init()
+			{
+
+				camera.position.set(0, 200, 0);
+				scene.add(camera);
+				var controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+				//GRASS
+				var grassGeo = new THREE.PlaneGeometry(50000, 50000, 10, 10);
+				var grassMat = new THREE.MeshLambertMaterial({color:0x19A319, side: THREE.DoubleSide});
+				var grass = new THREE.Mesh(grassGeo, grassMat);
+				grass.rotation.x = Math.PI / 2;
+				scene.add(grass);
+
+				//SKYBOX
+				var skyBoxGeo = new THREE.CubeGeometry(50000, 50000, 50000);
+				var skyBoxMat = new THREE.MeshBasicMaterial({color: 0x00CCFF, side: THREE.BackSide});
+				var skyBox = new THREE.Mesh(skyBoxGeo, skyBoxMat);
+				scene.add(skyBox);
+
+				//LIGHTS
+				var light = new THREE.PointLight(0xffffff);
+				light.position.set(30,300,40);
+				scene.add(light);
+				var ambientlight = new THREE.AmbientLight( 0xA1A1A1 ); // soft white light
+				scene.add( ambientlight );
+
+				//BUILDING TEXTURE
+				var texture       = new THREE.Texture( generateTexture() );
+				texture.anisotropy = renderer.getMaxAnisotropy();
+				texture.needsUpdate    = true;
+
+				//BUILDING MATERIAL
+				var buildingMaterial  = new THREE.MeshFaceMaterial([
+					new THREE.MeshLambertMaterial({map : texture,}),
+					new THREE.MeshLambertMaterial({map : texture,}),
+					new THREE.MeshLambertMaterial({color: Math.random() * 0xffffff}),
+					new THREE.MeshLambertMaterial({color: Math.random() * 0xffffff}),
+					new THREE.MeshLambertMaterial({map : texture,}),
+					new THREE.MeshLambertMaterial({map : texture,})
+					]);
+
+
+
+				function generateTexture() {
+				// build a small canvas 32x64 and paint it in white
+					var canvas  = document.createElement( 'canvas' );
+					canvas.width = 32;
+					canvas.height    = 64;
+					var context = canvas.getContext( '2d' );
+					// plain it in white
+					context.fillStyle    = '#ffffff';
+					context.fillRect( 0, 0, 32, 64 );
+					// draw the window rows - with a small noise to simulate light variations in each room
+					for( var y = 2; y < 64; y += 2 ){
+						for( var x = 0; x < 32; x += 2 ){
+							var value   = Math.floor( Math.random() * 64 );
+							context.fillStyle = 'rgb(' + [value, value, value].join( ',' )  + ')';
+							context.fillRect( x, y, 2, 1 );
+						}
+					}
+					// build a bigger canvas and copy the small one in it
+					// This is a trick to upscale the texture without filtering
+					var canvas2 = document.createElement( 'canvas' );
+					canvas2.width    = 512;
+					canvas2.height   = 1024;
+					var context = canvas2.getContext( '2d' );
+					// disable smoothing
+					context.imageSmoothingEnabled        = false;
+					context.imageSmoothingEnabled  = false;
+					context.mozImageSmoothingEnabled = false;
+					// then draw the image
+					context.drawImage( canvas, 0, 0, canvas2.width, canvas2.height );
+					// return the just built canvas2
+					return canvas2;
+				}
+
+
+				//TEST CYLINDER
+				var testcylindergeo = new THREE.CylinderGeometry(rad, rad, 5, 50, 50);
+				var testcylindermat = new THREE.MeshLambertMaterial({color:0x4d4d4d});
+				var testcylinder = new THREE.Mesh(testcylindergeo, testcylindermat);
+				scene.add(testcylinder);
+
+
+	////////////UNIT TITLES
+				//AERONAUTICS TEXT
+				var AeronauticsText = "Aeronautics";
+				var hash = document.location.hash.substr( 1 );
+
+				var materialFront = new THREE.MeshBasicMaterial({color: 0xffff00});
+				var materialSide = new THREE.MeshBasicMaterial({color: 0x000088});
+				var materialArray = [materialFront, materialSide];
+
+
+				if (hash.length !== 0 ) {
+					AeronauticsText = hash
+				}
+
+				var text3d = new THREE.TextGeometry( AeronauticsText, {
+					size:30, height: 5, curveSegments:3,
+					font: "helvetiker", weight: "bold", style: "normal",
+					bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+					material: 0, extrudeMaterial: 1
+				});
+				text3d.computeBoundingBox();
+
+				var centerOffset = -0.5 * (text3d.boundingBox.max.x - text3d.boundingBox.min.x);
+				var textMaterial = new THREE.MeshFaceMaterial(materialArray);
+
+				text = new THREE.Mesh(text3d, textMaterial);
+				text.position.set(centerOffset, 15, -rad + 15);
+				text.rotation.y = Math.PI*2
+				text.rotation.x = -Math.PI/8
+				var group = new THREE.Group()
+				group.add( text );
+				scene.add(group);
+
+				//MISSILES AND FIRE CONTROL TEXT
+				var MFCText = "Missiles and Fire Control";
+
+				var materialFront = new THREE.MeshBasicMaterial({color: 0xFFAAAF});
+				var materialSide = new THREE.MeshBasicMaterial({color: 0xF00000});
+				var materialArray = [materialFront, materialSide];
+
+
+				if (hash.length !== 0 ) {
+					MFCText = hash
+				}
+
+				var text3d = new THREE.TextGeometry( MFCText, {
+					size:25, height: 5, curveSegments:3,
+					font: "helvetiker", weight: "bold", style: "normal",
+					bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+					material: 0, extrudeMaterial: 1
+				});
+				text3d.computeBoundingBox();
+
+				var centerOffset = -0.5 * (text3d.boundingBox.max.x - text3d.boundingBox.min.x);
+				var textMaterial = new THREE.MeshFaceMaterial(materialArray);
+
+				text = new THREE.Mesh(text3d, textMaterial);
+				text.position.set(centerOffset-(rad*.65), 15, -rad*.23);
+				text.rotation.y = 2.1*Math.PI/7
+				var group = new THREE.Group()
+				group.add( text );
+				scene.add(group);
+
+				//MISSION AND SYSTEMS TRAINING TEXT
+				var MSTText = "Mission and Systems Training";
+
+				var materialFront = new THREE.MeshBasicMaterial({color: 0xFFC800});
+				var materialSide = new THREE.MeshBasicMaterial({color: 0xFF6400});
+				var materialArray = [materialFront, materialSide];
+
+
+				if (hash.length !== 0 ) {
+					MSTText = hash
+				}
+
+				var text3d = new THREE.TextGeometry( MSTText, {
+					size:22, height: 5, curveSegments:3,
+					font: "helvetiker", weight: "bold", style: "normal",
+					bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+					material: 0, extrudeMaterial: 1
+				});
+				text3d.computeBoundingBox();
+
+				var centerOffset = -0.5 * (text3d.boundingBox.max.x - text3d.boundingBox.min.x);
+				var textMaterial = new THREE.MeshFaceMaterial(materialArray);
+
+				text = new THREE.Mesh(text3d, textMaterial);
+				text.position.set(-centerOffset+(rad*.29), 15, -rad*.75);
+				//centerOffset-(rad*.65), 15, -rad*.15 + 10
+				text.rotation.y = -2.1*Math.PI/7
+				var group = new THREE.Group()
+				group.add( text );
+				scene.add(group);
+
+				//SPACE SYSTEMS TEXT
+				var SSText = "Space Systems";
+
+				var materialFront = new THREE.MeshBasicMaterial({color: 0x64FF64});
+				var materialSide = new THREE.MeshBasicMaterial({color: 0x00A600});
+				var materialArray = [materialFront, materialSide];
+
+
+				if (hash.length !== 0 ) {
+					MSTText = hash
+				}
+
+				var text3d = new THREE.TextGeometry( SSText, {
+					size:30, height: 5, curveSegments:3,
+					font: "helvetiker", weight: "bold", style: "normal",
+					bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+					material: 0, extrudeMaterial: 1
+				});
+				text3d.computeBoundingBox();
+
+				var centerOffset = -0.5 * (text3d.boundingBox.max.x - text3d.boundingBox.min.x);
+				var textMaterial = new THREE.MeshFaceMaterial(materialArray);
+
+				text = new THREE.Mesh(text3d, textMaterial);
+				text.position.set(-centerOffset+(rad*.75), 15, rad*.02);
+				text.rotation.y = -3.9*Math.PI/7
+				var group = new THREE.Group()
+				group.add( text );
+				scene.add(group);
+
+
+				//INFORMATION AND GLOBAL SOLUTIONS TEXT
+				var IGSText = "Information and Global Solutions";
+
+				var materialFront = new THREE.MeshBasicMaterial({color: 0xB45AB4});
+				var materialSide = new THREE.MeshBasicMaterial({color: 0x780078});
+				var materialArray = [materialFront, materialSide];
+
+
+				if (hash.length !== 0 ) {
+					IGSText = hash
+				}
+
+				var text3d = new THREE.TextGeometry( IGSText, {
+					size:20, height: 5, curveSegments:3,
+					font: "helvetiker", weight: "bold", style: "normal",
+					bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+					material: 0, extrudeMaterial: 1
+				});
+				text3d.computeBoundingBox();
+
+				var centerOffset = -0.5 * (text3d.boundingBox.max.x - text3d.boundingBox.min.x);
+				var textMaterial = new THREE.MeshFaceMaterial(materialArray);
+
+				text = new THREE.Mesh(text3d, textMaterial);
+				text.position.set(centerOffset-(rad*.55), 15, rad*.52);
+				text.rotation.y = 3.9*Math.PI/7
+				var group = new THREE.Group()
+				group.add( text );
+				scene.add(group);
+
+
+	//////////SPRITE SUB UNIT TITLES
+			function makeTextSprite( message, parameters )
+			{
+				if ( parameters === undefined ) parameters = {};
+
+				var fontface = parameters.hasOwnProperty("fontface") ?
+					parameters["fontface"] : "Arial";
+
+				var fontsize = parameters.hasOwnProperty("fontsize") ?
+					parameters["fontsize"] : 18;
+
+				var borderThickness = parameters.hasOwnProperty("borderThickness") ?
+					parameters["borderThickness"] : 4;
+
+				var borderColor = parameters.hasOwnProperty("borderColor") ?
+					parameters["borderColor"] : { r:0, g:0, b:0, a:1.0 };
+
+				var backgroundColor = parameters.hasOwnProperty("backgroundColor") ?
+					parameters["backgroundColor"] : { r:255, g:255, b:255, a:1.0 };
+
+				//var spriteAlignment = THREE.SpriteAlignment.topLeft;
+
+				var canvas = document.createElement('canvas');
+				var context = canvas.getContext('2d');
+				context.font = "Bold " + fontsize + "px " + fontface;
+
+				// get size data (height depends only on font size)
+				var metrics = context.measureText( message );
+				var textWidth = metrics.width;
+
+				// background color
+				context.fillStyle   = "rgba(" + backgroundColor.r + "," + backgroundColor.g + ","
+											  + backgroundColor.b + "," + backgroundColor.a + ")";
+				// border color
+				context.strokeStyle = "rgba(" + borderColor.r + "," + borderColor.g + ","
+											  + borderColor.b + "," + borderColor.a + ")";
+
+				context.lineWidth = borderThickness;
+				roundRect(context, borderThickness/2, borderThickness/2, textWidth + borderThickness, fontsize * 1.4 + borderThickness, 6);
+				// 1.4 is extra height factor for text below baseline: g,j,p,q.
+
+				// text color
+				context.fillStyle = "rgba(0, 0, 0, 1.0)";
+
+				context.fillText( message, borderThickness, fontsize + borderThickness);
+
+				// canvas contents will be used for a texture
+				var texture = new THREE.Texture(canvas)
+				texture.needsUpdate = true;
+
+				var spriteMaterial = new THREE.SpriteMaterial(
+					{ map: texture, useScreenCoordinates: false});// alignment: spriteAlignment } );
+				var sprite = new THREE.Sprite( spriteMaterial );
+				sprite.scale.set(100,50,1.0);
+				return sprite;
+			}
+
+			// function for drawing rounded rectangles
+			function roundRect(ctx, x, y, w, h, r)
+			{
+				ctx.beginPath();
+				ctx.moveTo(x+r, y);
+				ctx.lineTo(x+w-r, y);
+				ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+				ctx.lineTo(x+w, y+h-r);
+				ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+				ctx.lineTo(x+r, y+h);
+				ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+				ctx.lineTo(x, y+r);
+				ctx.quadraticCurveTo(x, y, x+r, y);
+				ctx.closePath();
+				ctx.fill();
+				ctx.stroke();
+			}
+
+	//////////////AERONAUTICS//
+				//F35
+				var F35Geo = new THREE.CubeGeometry(width, verylarge, width);
+				var F35 = new THREE.Mesh(F35Geo, buildingMaterial);
+				F35.position.set(0, verylarge/2, -(rad + width/2));
+				scene.add(F35);
+
+				var F35outlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var F35outline = new THREE.Mesh(F35Geo, F35outlinemat);
+				F35outline.position = F35.position;
+				F35outline.scale.multiplyScalar(1.07);
+				F35outline.position.set(0, verylarge/2,-(rad + width/2));
+				scene.add(F35outline);
+
+				var spritey = makeTextSprite( " F-35 ",
+					{ fontsize: 70, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(20, verylarge + 20, -rad);
+				scene.add( spritey );
+
+				F35.callback = function() {
+					F35outlinemat.color.setHex(0xffffff);
+					F35outline.scale.x *= 1.05;}
+				targetList.push(F35);
+
+				//Skunk Works
+				var SkunkWorksGeo = new THREE.CubeGeometry(width, medium, width);
+				var SkunkWorks = new THREE.Mesh(SkunkWorksGeo, buildingMaterial);
+				SkunkWorks.position.set(width+10, medium/2, -(rad + width/2));
+				scene.add(SkunkWorks);
+
+				var SkunkWorksoutlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var SkunkWorksoutline = new THREE.Mesh(SkunkWorksGeo, SkunkWorksoutlinemat);
+				SkunkWorksoutline.scale.multiplyScalar(1.07);
+				SkunkWorksoutline.position.set(width+10, medium/2, -(rad + width/2));
+				scene.add(SkunkWorksoutline);
+
+				var spritey = makeTextSprite( " Skunk Works ",
+					{ fontsize: 40, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(width + 15, medium + 10, -rad);
+				scene.add( spritey );
+
+
+				//C-5
+				var C5Geo = new THREE.CubeGeometry(width, medium, width);
+				var C5 = new THREE.Mesh(C5Geo, buildingMaterial);
+				C5.position.set(-(width+10), medium/2, -(rad + width/2));
+				scene.add(C5);
+
+				var C5outlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var C5outline = new THREE.Mesh(C5Geo, C5outlinemat);
+				C5outline.scale.multiplyScalar(1.07);
+				C5outline.position.set(-(width+10), medium/2, -(rad + width/2));
+				scene.add(C5outline);
+
+				var spritey = makeTextSprite( " C-5 ",
+					{ fontsize: 70, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(-width + 15, medium + 10, -rad);
+				scene.add( spritey );
+
+				//C-130
+				var C130Geo = new THREE.CubeGeometry(width, medium, width);
+				var C130 = new THREE.Mesh(C130Geo, buildingMaterial);
+				C130.position.set(-2*(width+10), medium/2, -(rad + width/2));
+				scene.add(C130);
+
+				var C130outlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var C130outline = new THREE.Mesh(C130Geo, C130outlinemat);
+				C130outline.scale.multiplyScalar(1.07);
+				C130outline.position.set(-2*(width+10), medium/2, -(rad + width/2));
+				scene.add(C130outline);
+
+				var spritey = makeTextSprite( " C-130 ",
+					{ fontsize: 60, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(-2*width, medium + 10, -rad);
+				scene.add( spritey );
+
+
+				//Integrated Fighter Group
+				var IntegratedFighterGroupGeo = new THREE.CubeGeometry(width, large, width);
+				var IntegratedFighterGroup = new THREE.Mesh(IntegratedFighterGroupGeo, buildingMaterial);
+				IntegratedFighterGroup.position.set(-3*(width+10), large/2, -(rad + width/2));
+				scene.add(IntegratedFighterGroup);
+
+				var IntegratedFighterGroupoutlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var IntegratedFighterGroupoutline = new THREE.Mesh(IntegratedFighterGroupGeo, IntegratedFighterGroupoutlinemat);
+				IntegratedFighterGroupoutline.scale.multiplyScalar(1.07);
+				IntegratedFighterGroupoutline.position.set(-3*(width+10), large/2, -(rad + width/2));
+				scene.add(IntegratedFighterGroupoutline);
+
+				var spritey = makeTextSprite( "Integrated Fighter Group",
+					{ fontsize: 23, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(-3*width-19, large + 7, -rad);
+				scene.add( spritey );
+
+				//GREENVILLE AND FIELD TEAM OPERATIONS
+				var GreenvilleGeo = new THREE.CubeGeometry(width, medium, width);
+				var Greenville = new THREE.Mesh(GreenvilleGeo, buildingMaterial);
+				Greenville.position.set(2*(width+10), medium/2, -(rad + width/2));
+				scene.add(Greenville);
+
+				var Greenvilleoutlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var Greenvilleoutline = new THREE.Mesh(GreenvilleGeo, Greenvilleoutlinemat);
+				Greenvilleoutline.scale.multiplyScalar(1.07);
+				Greenvilleoutline.position.set(2*(width+10), medium/2, -(rad + width/2));
+				scene.add(Greenvilleoutline);
+
+				var spritey = makeTextSprite( "Greenville & Field Team",
+					{ fontsize: 26, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(2*width + 20, medium + 5, -rad);
+				scene.add( spritey );
+
+				//COMMERCIAL ENGINE SOLUTIONS
+				var CMSGeo = new THREE.CubeGeometry(width, small, width);
+				var CMS = new THREE.Mesh(CMSGeo, buildingMaterial);
+				CMS.position.set(3*(width+10), small/2, -(rad + width/2));
+				scene.add(CMS);
+
+				var CMSoutlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var CMSoutline = new THREE.Mesh(CMSGeo, CMSoutlinemat);
+				CMSoutline.scale.multiplyScalar(1.07);
+				CMSoutline.position.set(3*(width+10), small/2, -(rad + width/2));
+				scene.add(CMSoutline);
+
+				var spritey = makeTextSprite( "Comm. Engine Solutions",
+					{ fontsize: 26, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(3*width + 30, small, -rad);
+				scene.add( spritey );
+
+				//P-3 ORION
+				var P3Geo = new THREE.CubeGeometry(width, medium, width);
+				var P3 = new THREE.Mesh(P3Geo, buildingMaterial);
+				P3.position.set(4*(width+10), medium/2, -(rad + width/2));
+				scene.add(P3);
+
+				var P3outlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var P3outline = new THREE.Mesh(P3Geo, P3outlinemat);
+				P3outline.scale.multiplyScalar(1.07);
+				P3outline.position.set(4*(width+10), medium/2, -(rad + width/2));
+				scene.add(P3outline);
+
+				var spritey = makeTextSprite( "P-3 Orion",
+					{ fontsize: 50, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(4*width + 30, medium + 5, -rad);
+				scene.add( spritey );
+
+				//U-2 DRAGON LADY
+				var U2Geo = new THREE.CubeGeometry(width, medium, width);
+				var U2 = new THREE.Mesh(U2Geo, buildingMaterial);
+				U2.position.set(-4*(width+10), medium/2, -(rad + width/2));
+				scene.add(U2);
+
+				var U2outlinemat = new THREE.MeshBasicMaterial({color: 0x0000FF, side: THREE.BackSide});
+				var U2outline = new THREE.Mesh(U2Geo, U2outlinemat);
+				U2outline.scale.multiplyScalar(1.07);
+				U2outline.position.set(-4*(width+10), medium/2, -(rad + width/2));
+				scene.add(U2outline);
+
+				var spritey = makeTextSprite( "U-2 Dragon Lady",
+					{ fontsize: 35, borderColor: {r:150, g:20, b:250, a:1.0}, backgroundColor: {r:250, g:250, b:0, a:0.8} } );
+				spritey.position.set(-4*width-40, medium + 7, -rad);
+				scene.add( spritey );
+
+
+	////////////MISSILES AND FIRE CONTROL//
+				//Advanced/Special Programs
+				var AdvancedGeo = new THREE.BoxGeometry(width, medium, width);
+				var Advanced = new THREE.Mesh(AdvancedGeo, buildingMaterial);
+				Advanced.position.set(-rad*.81, medium/2, -rad*.68);
+				Advanced.rotation.y = 2.1*Math.PI/7
+				scene.add(Advanced);
+
+				var Advancedoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF4545, side: THREE.BackSide});
+				var Advancedoutline = new THREE.Mesh(AdvancedGeo, Advancedoutlinemat);
+				Advancedoutline.scale.multiplyScalar(1.07);
+				Advancedoutline.position.set(-rad*.81, medium/2, -rad*.68);
+				Advancedoutline.rotation.y = 2.1*Math.PI/7
+				scene.add(Advancedoutline);
+
+				var spritey = makeTextSprite( "Advanced Programs",
+					{ fontsize: 30, borderColor: {r:240, g:0, b:0, a:1.0}, backgroundColor: {r:255, g:170, b:175, a:0.8} } );
+				spritey.position.set(-rad*.82+4, medium + 5, -rad*.7);
+				scene.add( spritey );
+
+
+				//Air and Missile Defense
+				var AirAndMissileGeo = new THREE.BoxGeometry(width, large, width);
+				var AirAndMissile = new THREE.Mesh(AirAndMissileGeo, buildingMaterial);
+				AirAndMissile.position.set(-rad*.905, large/2, -rad*.57);
+				AirAndMissile.rotation.y = 2.1*Math.PI/7
+				scene.add(AirAndMissile);
+
+				var AirAndMissileoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF4545, side: THREE.BackSide});
+				var AirAndMissileoutline = new THREE.Mesh(AirAndMissileGeo, AirAndMissileoutlinemat);
+				AirAndMissileoutline.scale.multiplyScalar(1.07);
+				AirAndMissileoutline.position.set(-rad*.905, large/2, -rad*.57);
+				AirAndMissileoutline.rotation.y = 2.1*Math.PI/7
+				scene.add(AirAndMissileoutline);
+
+				var spritey = makeTextSprite( "Air&Missile Def.",
+					{ fontsize: 30, borderColor: {r:240, g:0, b:0, a:1.0}, backgroundColor: {r:255, g:170, b:175, a:0.8} } );
+				spritey.position.set(-rad*.905+5, large + 5, -rad*.57-2);
+				scene.add( spritey );
+
+				//FIRE CONTROL AND LOGISTICS SUPPORT SERVICES
+				var FCGeo = new THREE.BoxGeometry(width, large, width);
+				var FC = new THREE.Mesh(FCGeo, buildingMaterial);
+				FC.position.set(-rad*.9805, large/2, -rad*.4505);
+				FC.rotation.y = 2.1*Math.PI/7
+				scene.add(FC);
+
+				var FCoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF4545, side: THREE.BackSide});
+				var FCoutline = new THREE.Mesh(FCGeo, FCoutlinemat);
+				FCoutline.scale.multiplyScalar(1.07);
+				FCoutline.position.set(-rad*.9805, large/2, -rad*.4505);
+				FCoutline.rotation.y = 2.1*Math.PI/7
+				scene.add(FCoutline);
+
+				var spritey = makeTextSprite( "Fire Contol & Log.",
+					{ fontsize: 30, borderColor: {r:240, g:0, b:0, a:1.0}, backgroundColor: {r:255, g:170, b:175, a:0.8} } );
+				spritey.position.set(-rad*.9805, large + 5, -rad*.4505);
+				scene.add( spritey );
+
+				//TECHNICAL SERVICES
+				var TSGeo = new THREE.BoxGeometry(width, large, width);
+				var TS = new THREE.Mesh(TSGeo, buildingMaterial);
+				TS.position.set(-rad*1.05, large/4, -rad*.33);
+				TS.rotation.y = 2.1*Math.PI/7
+				scene.add(TS);
+
+				var TSoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF4545, side: THREE.BackSide});
+				var TSoutline = new THREE.Mesh(TSGeo, TSoutlinemat);
+				TSoutline.scale.multiplyScalar(1.07);
+				TSoutline.position.set(-rad*1.05, large/4, -rad*.33);
+				TSoutline.rotation.y = 2.1*Math.PI/7
+				scene.add(TSoutline);
+
+				var spritey = makeTextSprite( "Technical Serv.",
+					{ fontsize: 30, borderColor: {r:240, g:0, b:0, a:1.0}, backgroundColor: {r:255, g:170, b:175, a:0.8} } );
+				spritey.position.set(-rad*1.05+5, medium + 5, -rad*.35+7);
+				scene.add( spritey );
+
+
+				//TACTICAL MISSILES AND COMBAT MANEUVER SYSTEMS
+				var TMGeo = new THREE.BoxGeometry(width, large, width);
+				var TM = new THREE.Mesh(TMGeo, buildingMaterial);
+				TM.position.set(-rad*.72, large/2, -rad*.8);
+				TM.rotation.y = 2.1*Math.PI/7
+				scene.add(TM);
+
+				var TMoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF4545, side: THREE.BackSide});
+				var TMoutline = new THREE.Mesh(TMGeo, TMoutlinemat);
+				TMoutline.scale.multiplyScalar(1.07);
+				TMoutline.position.set(-rad*.72, large/2, -rad*.8);
+				TMoutline.rotation.y = 2.1*Math.PI/7
+				scene.add(TMoutline);
+
+				var spritey = makeTextSprite( "Tactical Missiles & Comb.",
+					{ fontsize: 25, borderColor: {r:240, g:0, b:0, a:1.0}, backgroundColor: {r:255, g:170, b:175, a:0.8} } );
+				spritey.position.set(-rad*.72-5, large + 5, -rad*.8-5);
+				scene.add( spritey );
+
+
+	////////////MISSION AND SYSTEMS TRAINING
+				//INTEGRATED WARFARE SYSTEMS AND SENSORS
+				var IWGeo = new THREE.BoxGeometry(width, large, width);
+				var IW = new THREE.Mesh(IWGeo, buildingMaterial);
+				IW.position.set(rad*.72, large/2, -rad*.8);
+				IW.rotation.y = -2.1*Math.PI/7
+				scene.add(IW);
+
+				var IWoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF9900, side: THREE.BackSide});
+				var IWoutline = new THREE.Mesh(IWGeo, IWoutlinemat);
+				IWoutline.scale.multiplyScalar(1.07);
+				IWoutline.position.set(rad*.72, large/2, -rad*.8);
+				IWoutline.rotation.y = -2.1*Math.PI/7
+				scene.add(IWoutline);
+
+				var spritey = makeTextSprite( "Integrated Warfare",
+					{ fontsize: 30, borderColor: {r:255, g:100, b:0, a:1.0}, backgroundColor: {r:255, g:200, b:0, a:0.8} } );
+				spritey.position.set(rad*.72-4, large + 5, -rad*.8);
+				scene.add( spritey );
+
+				//SHIP & AVIATION SYSTEMS
+				var SAGeo = new THREE.BoxGeometry(width, large, width);
+				var SA = new THREE.Mesh(SAGeo, buildingMaterial);
+				SA.position.set(rad*.81, small/2, -rad*.68);
+				SA.rotation.y = -2.1*Math.PI/7
+				scene.add(SA);
+
+				var SAoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF9900, side: THREE.BackSide});
+				var SAoutline = new THREE.Mesh(SAGeo, SAoutlinemat);
+				SAoutline.scale.multiplyScalar(1.07);
+				SAoutline.position.set(rad*.81, small/2, -rad*.68);
+				SAoutline.rotation.y = -2.1*Math.PI/7
+				scene.add(SAoutline);
+
+				var spritey = makeTextSprite( "Ship & Aviation Sys",
+					{ fontsize: 25, borderColor: {r:255, g:100, b:0, a:1.0}, backgroundColor: {r:255, g:200, b:0, a:0.8} } );
+				spritey.position.set(rad*.81+4, medium, -rad*.68+5);
+				scene.add( spritey );
+
+				//SUSTAINABILITY TECHNOLOGIES
+				var SustainGeo = new THREE.BoxGeometry(width, small, width);
+				var Sustain = new THREE.Mesh(SustainGeo, buildingMaterial);
+				Sustain.position.set(rad*.905, small/2, -rad*.57);
+				Sustain.rotation.y = -2.1*Math.PI/7
+				scene.add(Sustain);
+
+				var Sustainoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF9900, side: THREE.BackSide});
+				var Sustainoutline = new THREE.Mesh(SustainGeo, Sustainoutlinemat);
+				Sustainoutline.scale.multiplyScalar(1.07);
+				Sustainoutline.position.set(rad*.905, small/2, -rad*.57);
+				Sustainoutline.rotation.y = -2.1*Math.PI/7
+				scene.add(Sustainoutline);
+
+				var spritey = makeTextSprite( "Sustainability Tech.",
+					{ fontsize: 25, borderColor: {r:255, g:100, b:0, a:1.0}, backgroundColor: {r:255, g:200, b:0, a:0.8} } );
+				spritey.position.set(rad*.905+4, small + 5, -rad*.57+5);
+				scene.add( spritey );
+
+				//TRAINING AND LOGISTICS SOLUTIONS
+				var TLGeo = new THREE.BoxGeometry(width, large, width);
+				var TL = new THREE.Mesh(TLGeo, buildingMaterial);
+				TL.position.set(rad*.9805, large/2, -rad*.4505);
+				TL.rotation.y = -2.1*Math.PI/7
+				scene.add(TL);
+
+				var TLoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF9900, side: THREE.BackSide});
+				var TLoutline = new THREE.Mesh(TLGeo, TLoutlinemat);
+				TLoutline.scale.multiplyScalar(1.07);
+				TLoutline.position.set(rad*.9805, large/2, -rad*.4505);
+				TLoutline.rotation.y = -2.1*Math.PI/7
+				scene.add(TLoutline);
+
+				var spritey = makeTextSprite( "Training and Logistics",
+					{ fontsize: 25, borderColor: {r:255, g:100, b:0, a:1.0}, backgroundColor: {r:255, g:200, b:0, a:0.8} } );
+				spritey.position.set(rad*.9805+4, large + 5, -rad*.4505+5);
+				scene.add( spritey );
+
+				//UNDERSEA SYSTEMS
+				var USGeo = new THREE.BoxGeometry(width, large, width);
+				var US = new THREE.Mesh(USGeo, buildingMaterial);
+				US.position.set(rad*1.05, large/4, -rad*.33);
+				US.rotation.y = -2.1*Math.PI/7
+				scene.add(US);
+
+				var USoutlinemat = new THREE.MeshBasicMaterial({color: 0xFF9900, side: THREE.BackSide});
+				var USoutline = new THREE.Mesh(USGeo, USoutlinemat);
+				USoutline.scale.multiplyScalar(1.07);
+				USoutline.position.set(rad*1.05, large/4, -rad*.33);
+				USoutline.rotation.y = -2.1*Math.PI/7
+				scene.add(USoutline);
+
+				var spritey = makeTextSprite( "Undersea Systems",
+					{ fontsize: 25, borderColor: {r:255, g:100, b:0, a:1.0}, backgroundColor: {r:255, g:200, b:0, a:0.8} } );
+				spritey.position.set(rad*1.05, medium, -rad*.33+10);
+				scene.add( spritey );
+
+
+	////////////SPACE SYSTEMS
+				//Advanced Technology Center
+				var ATCGeo = new THREE.BoxGeometry(width, large, width);
+				var ATC = new THREE.Mesh(ATCGeo, buildingMaterial);
+				ATC.position.set(rad*1.05, large/2, rad*.20);
+				ATC.rotation.y = -3.9*Math.PI/7
+				scene.add(ATC);
+
+				var ATCoutlinemat = new THREE.MeshBasicMaterial({color: 0x30FF30, side: THREE.BackSide});
+				var ATCoutline = new THREE.Mesh(ATCGeo, ATCoutlinemat);
+				ATCoutline.scale.multiplyScalar(1.07);
+				ATCoutline.position.set(rad*1.05, large/2, rad*.20);
+				ATCoutline.rotation.y = -3.9*Math.PI/7
+				scene.add(ATCoutline);
+
+				var spritey = makeTextSprite( "Adv. Technology Center",
+					{ fontsize: 25, borderColor: {r:0, g:166, b:0, a:1.0}, backgroundColor: {r:100, g:255, b:100, a:0.8} } );
+				spritey.position.set(rad*1.05, large + 5, rad*.2);
+				scene.add( spritey );
+
+
+				//Civil Space
+				var CSGeo = new THREE.BoxGeometry(width, large, width);
+				var CS = new THREE.Mesh(CSGeo, buildingMaterial);
+				CS.position.set(rad*1.07, large/3, rad*.06);
+				CS.rotation.y = -3.9*Math.PI/7
+				scene.add(CS);
+
+				var CSoutlinemat = new THREE.MeshBasicMaterial({color: 0x30FF30, side: THREE.BackSide});
+				var CSoutline = new THREE.Mesh(CSGeo, CSoutlinemat);
+				CSoutline.scale.multiplyScalar(1.07);
+				CSoutline.position.set(rad*1.07, large/3, rad*.06);
+				CSoutline.rotation.y = -3.9*Math.PI/7
+				scene.add(CSoutline);
+
+				var spritey = makeTextSprite( "Civil Space",
+					{ fontsize: 30, borderColor: {r:0, g:166, b:0, a:1.0}, backgroundColor: {r:100, g:255, b:100, a:0.8} } );
+				spritey.position.set(rad*1.07, large/3 + large/2+5, rad*.06 + 15);
+				scene.add( spritey );
+
+				//Commercial Space
+				var CommercialGeo = new THREE.BoxGeometry(width, large, width);
+				var Commercial = new THREE.Mesh(CommercialGeo, buildingMaterial);
+				Commercial.position.set(rad*1.085, large/3, -rad*.08);
+				Commercial.rotation.y = -3.9*Math.PI/7
+				scene.add(Commercial);
+
+				var Commercialoutlinemat = new THREE.MeshBasicMaterial({color: 0x30FF30, side: THREE.BackSide});
+				var Commercialoutline = new THREE.Mesh(CommercialGeo, Commercialoutlinemat);
+				Commercialoutline.scale.multiplyScalar(1.07);
+				Commercialoutline.position.set(rad*1.085, large/3, -rad*.08);
+				Commercialoutline.rotation.y = -3.9*Math.PI/7
+				scene.add(Commercialoutline);
+
+				var spritey = makeTextSprite( "Commercial Space",
+					{ fontsize: 30, borderColor: {r:0, g:166, b:0, a:1.0}, backgroundColor: {r:100, g:255, b:100, a:0.8} } );
+				spritey.position.set(rad*1.085, large/2 + large/3 + 5, -rad*.08);
+				scene.add( spritey );
+
+				//Military Space
+				var MiltaryGeo = new THREE.BoxGeometry(width, large, width);
+				var Miltary = new THREE.Mesh(MiltaryGeo, buildingMaterial);
+				Miltary.position.set(rad*1.0295, large/3, rad*.33);
+				Miltary.rotation.y = -3.9*Math.PI/7
+				scene.add(Miltary);
+
+				var Miltaryoutlinemat = new THREE.MeshBasicMaterial({color: 0x30FF30, side: THREE.BackSide});
+				var Miltaryoutline = new THREE.Mesh(MiltaryGeo, Miltaryoutlinemat);
+				Miltaryoutline.scale.multiplyScalar(1.07);
+				Miltaryoutline.position.set(rad*1.0295, large/3, rad*.33);
+				Miltaryoutline.rotation.y = -3.9*Math.PI/7
+				scene.add(Miltaryoutline);
+
+				var spritey = makeTextSprite( "Military Space",
+					{ fontsize: 30, borderColor: {r:0, g:166, b:0, a:1.0}, backgroundColor: {r:100, g:255, b:100, a:0.8} } );
+				spritey.position.set(rad*1.0295, large/3 + large/2 + 5, rad*.35);
+				scene.add( spritey );
+
+				//SMD
+				var SMDGeo = new THREE.BoxGeometry(width, large, width);
+				var SMD = new THREE.Mesh(SMDGeo, buildingMaterial);
+				SMD.position.set(rad*1, large/12, rad*.465);
+				SMD.rotation.y = -3.9*Math.PI/7
+				scene.add(SMD);
+
+				var SMDoutlinemat = new THREE.MeshBasicMaterial({color: 0x30FF30, side: THREE.BackSide});
+				var SMDoutline = new THREE.Mesh(SMDGeo, SMDoutlinemat);
+				SMDoutline.scale.multiplyScalar(1.07);
+				SMDoutline.position.set(rad*1, large/12, rad*.465);
+				SMDoutline.rotation.y = -3.9*Math.PI/7
+				scene.add(SMDoutline);
+
+				var spritey = makeTextSprite( "SMD",
+					{ fontsize: 40, borderColor: {r:0, g:166, b:0, a:1.0}, backgroundColor: {r:100, g:255, b:100, a:0.8} } );
+				spritey.position.set(rad*1, large/12 + large/2 + 5, rad*.5);
+				scene.add( spritey );
+
+				//Special Programs
+				var SPGeo = new THREE.BoxGeometry(width, large, width);
+				var SP = new THREE.Mesh(SPGeo, buildingMaterial);
+				SP.position.set(rad*.98, large/2, rad*.6);
+				SP.rotation.y = -3.9*Math.PI/7
+				scene.add(SP);
+
+				var SPoutlinemat = new THREE.MeshBasicMaterial({color: 0x30FF30, side: THREE.BackSide});
+				var SPoutline = new THREE.Mesh(SPGeo, SPoutlinemat);
+				SPoutline.scale.multiplyScalar(1.07);
+				SPoutline.position.set(rad*.98, large/2, rad*.6);
+				SPoutline.rotation.y = -3.9*Math.PI/7
+				scene.add(SPoutline);
+
+				var spritey = makeTextSprite( "Special Programs",
+					{ fontsize: 30, borderColor: {r:0, g:166, b:0, a:1.0}, backgroundColor: {r:100, g:255, b:100, a:0.8} } );
+				spritey.position.set(rad*.98, large + 5, rad*.6);
+				scene.add( spritey );
+
+
+////////////////INFORMATION SYSTEMS AND GLOBAL SOLUTIONS
+				//Civil IS&GS
+				var CISGeo = new THREE.BoxGeometry(width, large, width);
+				var CIS = new THREE.Mesh(CISGeo, buildingMaterial);
+				CIS.position.set(-rad*1.07, large/3, rad*.06);
+				CIS.rotation.y = 3.9*Math.PI/7
+				scene.add(CIS);
+
+				var CISoutlinemat = new THREE.MeshBasicMaterial({color: 0xA319A3, side: THREE.BackSide});
+				var CISoutline = new THREE.Mesh(CISGeo, CISoutlinemat);
+				CISoutline.scale.multiplyScalar(1.07);
+				CISoutline.position.set(-rad*1.07, large/3, rad*.06);
+				CISoutline.rotation.y = 3.9*Math.PI/7
+				scene.add(CISoutline);
+
+				var spritey = makeTextSprite( "Civil IS&GS",
+					{ fontsize: 40, borderColor: {r:120, g:0, b:120, a:1.0}, backgroundColor: {r:180, g:90, b:180, a:0.8} } );
+				spritey.position.set(-rad*1.07, large/3 + large/2+5, rad*.06-10);
+				scene.add( spritey );
+
+				//Commercial Markets
+				var CMGeo = new THREE.BoxGeometry(width, large, width);
+				var CM = new THREE.Mesh(CMGeo, buildingMaterial);
+				CM.position.set(-rad*1.05, large/2, rad*.20);
+				CM.rotation.y = 3.9*Math.PI/7
+				scene.add(CM);
+
+				var CMoutlinemat = new THREE.MeshBasicMaterial({color: 0xA319A3, side: THREE.BackSide});
+				var CMoutline = new THREE.Mesh(CMGeo, CMoutlinemat);
+				CMoutline.scale.multiplyScalar(1.07);
+				CMoutline.position.set(-rad*1.05, large/2, rad*.20);
+				CMoutline.rotation.y = 3.9*Math.PI/7
+				scene.add(CMoutline);
+
+				var spritey = makeTextSprite( "Commercial Markets",
+					{ fontsize: 30, borderColor: {r:120, g:0, b:120, a:1.0}, backgroundColor: {r:180, g:90, b:180, a:0.6} } );
+				spritey.position.set(-rad*1.05, large + 2, rad*.20);
+				scene.add( spritey );
+
+				//Defense and Intelligence Solutions
+				var DISGeo = new THREE.BoxGeometry(width, large, width);
+				var DIS = new THREE.Mesh(DISGeo, buildingMaterial);
+				DIS.position.set(-rad*1.0295, 0, rad*.33);
+				DIS.rotation.y = 3.9*Math.PI/7
+				scene.add(DIS);
+
+				var DISoutlinemat = new THREE.MeshBasicMaterial({color: 0xA319A3, side: THREE.BackSide});
+				var DISoutline = new THREE.Mesh(DISGeo, DISoutlinemat);
+				DISoutline.scale.multiplyScalar(1.07);
+				DISoutline.position.set(-rad*1.0295, 0, rad*.33);
+				DISoutline.rotation.y = 3.9*Math.PI/7
+				scene.add(DISoutline);
+
+				var spritey = makeTextSprite( "Def. and Intel Solutions",
+					{ fontsize: 25, borderColor: {r:120, g:0, b:120, a:1.0}, backgroundColor: {r:180, g:90, b:180, a:0.6} } );
+				spritey.position.set(-rad*1.0295, large/2 + 5, rad*.33);
+				scene.add( spritey );
+
+
+				//Global Solutions
+				var GSGeo = new THREE.BoxGeometry(width, large, width);
+				var GS = new THREE.Mesh(GSGeo, buildingMaterial);
+				GS.position.set(-rad*1, large/12, rad*.465);
+				GS.rotation.y = 3.9*Math.PI/7
+				scene.add(GS);
+
+				var GSoutlinemat = new THREE.MeshBasicMaterial({color: 0xA319A3, side: THREE.BackSide});
+				var GSoutline = new THREE.Mesh(GSGeo, GSoutlinemat);
+				GSoutline.scale.multiplyScalar(1.07);
+				GSoutline.position.set(-rad*1, large/12, rad*.465);
+				GSoutline.rotation.y = 3.9*Math.PI/7
+				scene.add(GSoutline);
+
+				var spritey = makeTextSprite( " Global Solutions ",
+					{ fontsize: 30, borderColor: {r:120, g:0, b:120, a:1.0}, backgroundColor: {r:180, g:90, b:180, a:0.6} } );
+				spritey.position.set(-rad*1, large/2 + 15, rad*.465);
+				scene.add( spritey );
+
+
+				//MULTIPLE CAMERAS
+				AeronauticsCamera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 40000);
+				scene.add(AeronauticsCamera);
+				AeronauticsCamera.position.set(0, 200, -100);
+				AeronauticsCamera.lookAt(F35.position);
+
+				projector  = new THREE.Projector();
+
+				document.addEventListener('mousedown', onDocumentMouseDown, false);
+
+			}
+
+			function onDocumentMouseDown( event )
+			{
+				// the following line would stop any other event handler from firing
+				// (such as the mouses TrackballControls)
+				event.preventDefault();
+
+				console.log("Click.");
+
+				// update the mouse variable
+				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+				// find intersections
+
+				// create a Ray with origin at the mouse position
+				//   and direction into the scene (camera direction)
+				var vector = new THREE.Vector3( mouse.x, mouse.y, 1 );
+				projector.unprojectVector( vector, camera );
+				var ray = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+
+				// create an array containing all objects in the scene with which the ray intersects
+				var intersects = ray.intersectObjects( targetList );
+
+				// if there is one (or more) intersections
+				if ( intersects.length > 0 )
+				{
+					console.log("Hit @ " + toString( intersects[0].point ) );
+					intersects[0].object.callback();
+				}
+
+			}
+
+			function toString(v) { return "[ " + v.x + ", " + v.y + ", " + v.z + " ]"; }
+
+
+			function update()
+			{
+				if ( keyboard.pressed("1") )
+				{  AeronauticsCameraActive = true }
+
+				if ( keyboard.pressed("2") )
+				{ AeronauticsCameraActive = false}
+			};
+
+			function animate()
+			{
+				requestAnimationFrame( animate );
+				render();
+				update();
+			}
+
+			function render()
+			{
+				if (AeronauticsCameraActive)
+				{renderer.render( scene, AeronauticsCamera ) }
+
+				else
+				{renderer.render( scene, camera )}
+
+			};
+
+
+
+		</script>
+
+	</body>
+</html>
